@@ -1,0 +1,6 @@
+[submodule "optimization/LBFGSB"]
+	path = optimization/LBFGSB
+	url = git@github.com:vkazei/LBFGSB.git
+[submodule "helmholtz"]
+	path = helmholtz
+	url = git@github.com:vkazei/fastHelmholtz.git
