@@ -125,7 +125,6 @@ while freq<=fMax
     model.f = freq;
     
     DClean = F(m.Base,model);
-    
     D0 = F(m.Init,model);
     
     % Gaussian noise
@@ -149,7 +148,7 @@ while freq<=fMax
         end
         
         %  FWI ================================================
-        fwiResult = fwiFunc_Clean(i, m.Init, D, model, opts);
+        fwiResult = fwiFunc(i, m.Init, D, model, opts);
         % =====================================================
         
         figure;
@@ -157,11 +156,7 @@ while freq<=fMax
         
         % Relax regularization and increase affordable offset
         model.maxOffset = fFactor*model.maxOffset;
-        opts.R.alphaTV = opts.R.alphaTV/fFactor;
-        %opts.R.alpha = opts.R.alpha;
-        %opts.histAll = optsArr(1).histAll;
-        %m.InitArr(i) = 1./FWIArr(fix((sizeReg^2+1)/2)).final(:).^2;
-        
+        opts.R.alphaTV = opts.R.alphaTV/fFactor;    
         m.Init(:) = 1./fwiResult.final(:).^2;
         
     end
@@ -173,15 +168,6 @@ end
 %%%%%%%%%%%%%%%%%
 % FINAL PLOT
 %%%%%%%%%%%%%%%%%
-% fig = figure;
-% fig.PaperUnits = 'inches';
-% fig.PaperPosition = [0 0 24 8];
-% vk = fwiResult.final;
-% imagesc(x/1000,z/1000,vk,[min(v.Base(:)) max(v.Base(:))]); 
-% xlabel('km'); ylabel('km'); title('Final'); c=colorbar; ylabel(c,'km/s');
-% axis equal tight;
-% print(fig, [figFolder,'/fwiFinal'], '-depsc');
-
 figure;
 imagescc(fwiResult.final,model,'Final',[figFolder 'final'])
 

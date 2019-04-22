@@ -4,7 +4,7 @@
 
 
 
-function  FWI = fwiFunc_Clean(i, m0, D, model, opts)
+function  FWI = fwiFunc(i, m0, D, model, opts)
 
 
 % % read model, dx = 20 or 50
