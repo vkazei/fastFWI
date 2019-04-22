@@ -48,7 +48,8 @@ v_Fun_Init = @(zz,xx)v.Base(1)+0.9e-3*max(zz-450,0);
 v.Init = v_Fun_Init(zz,xx);
 
 imagescc(v.Base,model,'Marmousi II',[figFolder,'true'])
-imagescc(v.Init,model,'Marmousi II',[figFolder,'init'])
+model.caxis = caxis;
+imagescc(v.Init,model,'Initial',[figFolder,'init'])
 
 % model - converted to squared slowness
 %baseline
