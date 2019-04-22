@@ -1,13 +1,30 @@
-%% run FWI for marmousi II model
+%% Example of FWI for Marmousi II benchmark model.
+%
+% Press "Run" to launch the script
+%
+% Vladimir Kazei and Oleg Ovcharenko, 2019
+
+tic
+close all
+clearvars
 restoredefaultpath
+spparms('bandden',0.0)
 
-tic; close all; clearvars; cd ..; startup; cd examples
-spparms('bandden',0.0);
-figFolder = 'Fig';
+% Link core folders
+addpath(genpath('../engine/'));
+set(groot,'DefaultFigureColormap',rdbuMap())
 
+% Create Fig/ folder where to store output images
+figFolder = 'Fig/';
+if exist(figFolder, 'dir')
+    fprintf(['Exist ' figFolder '\n']);
+else
+    mkdir(figFolder);
+    fprintf(['Create ' figFolder '\n']);
+end
 
 %% MODEL and GRID
-% read Marmousi II model (Baseline), dx = 10, 20 or 40
+% read Marmousi II model (Baseline)
 dx = 50;
 v.Base = dlmread('models/marm2/marm2_10.dat');
 v.Base = imresize(v.Base, 10/dx, 'bilinear');
@@ -15,7 +32,7 @@ v.Base = imresize(v.Base, 10/dx, 'bilinear');
 % append  N_ext_up points from above for the absorbing layer
 N_ext_up = 5;
 v.Base = [repmat(v.Base(1,:),5,1);  v.Base];
-  
+
 % grid creation
 model.n  = size(v.Base);
 model.h  = dx*[1 1];
@@ -23,10 +40,15 @@ z  = [-N_ext_up:model.n(1)-1-N_ext_up]*model.h(1);
 x  = [0:model.n(2)-1]*model.h(2);
 [zz,xx] = ndgrid(z,x);
 
+model.x = x;
+model.z = z;
+
+% build linear initial model for FWI
 v_Fun_Init = @(zz,xx)v.Base(1)+0.9e-3*max(zz-450,0);
 v.Init = v_Fun_Init(zz,xx);
 
-plot2v(x,z,v,[figFolder,'/inputModel']);
+imagescc(v.Base,model,'Marmousi II',[figFolder,'true'])
+imagescc(v.Init,model,'Marmousi II',[figFolder,'init'])
 
 % model - converted to squared slowness
 %baseline
@@ -36,21 +58,21 @@ m.Init = 1./v.Init(:).^2;
 
 
 
-%% DATA AACQUISITION
+%% DATA ACQUISITION
 % set frequency range, not larger than min(1e3*v(:))/(7.5*dx) or smaller than 0.5
 fMin  = 1; % this is the minimum frequency used for inversion
 fFactor = 1.2; % factor to the next frequncy
 fMax = 5; % this is the max frequency used for inversion
 
-% receivers, xr = .1 - 10km, with 2*dx spacing, zr = 2*dx
+% receivers
 model.xr = 5*dx:dx:16800;
 model.zr = 5*dx*ones(1,length(model.xr));
 
-% sources, xr = .1 - 10km, with 4*dx spacing, zr = 2*dx
+% sources
 model.xs = 5*dx:200:16800;
 model.zs = 5*dx*ones(1,length(model.xs));
 
-% for each frequency offsets are inverted sequentially each next is *Factor of perevious 
+% for each frequency offsets are inverted sequentially each next is *Factor of perevious
 minMaxOffset = 8000;
 maxMaxOffset = 8000;
 
@@ -61,13 +83,13 @@ model.dx = dx;
 
 
 %% REGULARIZATION
-% regFlag chooses the type of regularization to be applied 
-% -2 - Tikhonov;  -1 - MS; 1 - MGS;  2 - (TV); 3 - W_p^1; 
+% regFlag chooses the type of regularization to be applied
+% -2 - Tikhonov;  -1 - MS; 1 - MGS;  2 - (TV); 3 - W_p^1;
 % 0 - no regularization
 flags.R = 3;
 opts.R = loadRegPresets(flags.R);
-% 1 - regularize update (usual for time-lapse), 
-% 0 - regularize model itself (blocky model) 
+% 1 - regularize update (usual for time-lapse),
+% 0 - regularize model itself (blocky model)
 opts.R.dmFlag = 0;
 
 % this restricts the updates l and u are multiplied by this
@@ -94,10 +116,11 @@ opts.histAll = 0;
 
 
 %% MAIN LOOP OVER FREQUENCIES
-
+it=0;
 freq = fMin;
 while freq<=fMax
-    %% acquire noisy data
+    it=it+1;
+    % acquire noisy data
     model.maxOffset = minMaxOffset;
     model.f = freq;
     
@@ -108,30 +131,31 @@ while freq<=fMax
     % Gaussian noise
     mySNR = 100;
     
-    noiseStandDev = 0*1/sqrt(mySNR);
+    noiseStandDev = 1/sqrt(mySNR);
     noiseStandDev = noiseStandDev * sqrt(mean(mean(abs(DClean).*abs(DClean))));
-    D = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev); 
-      
+    D = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev);
+    
     snrDB = snr(DClean, D-DClean)
     matSNR  = db2pow(snrDB)
-        
-    %% LOOP OVER OFFSETS
+    
+    % Mute offsets beyond the max limit
     while model.maxOffset <= maxMaxOffset
-        %% OFFSET LIMITATION
-         for i=1:size(model.xr,2)
+        for i=1:size(model.xr,2)
             for j=1:size(model.xs,2)
                 if abs(model.xr(i)-model.xs(j))>model.maxOffset
                     D(i,j)=0;
                 end
             end
         end
-     
-            fwiResult = fwiFunc_Clean(i, m.Init, D, model, opts);
-            figure(100)
-            imagesc(fwiResult.final);
-            drawnow
-       
         
+        %  FWI ================================================
+        fwiResult = fwiFunc_Clean(i, m.Init, D, model, opts);
+        % =====================================================
+        
+        figure;
+        imagescc(fwiResult.final,model,[num2str(model.f) ' Hz'],[figFolder num2str(it)])
+        
+        % Relax regularization and increase affordable offset
         model.maxOffset = fFactor*model.maxOffset;
         opts.R.alphaTV = opts.R.alphaTV/fFactor;
         %opts.R.alpha = opts.R.alpha;
@@ -149,22 +173,17 @@ end
 %%%%%%%%%%%%%%%%%
 % FINAL PLOT
 %%%%%%%%%%%%%%%%%
-fig251 = figure(251);
+% fig = figure;
+% fig.PaperUnits = 'inches';
+% fig.PaperPosition = [0 0 24 8];
+% vk = fwiResult.final;
+% imagesc(x/1000,z/1000,vk,[min(v.Base(:)) max(v.Base(:))]); 
+% xlabel('km'); ylabel('km'); title('Final'); c=colorbar; ylabel(c,'km/s');
+% axis equal tight;
+% print(fig, [figFolder,'/fwiFinal'], '-depsc');
 
-    vk = fwiResult.final;
-    %subaxis(sizeReg,sizeReg,i,'Spacing',0.01,'Margin',0.01);
-    %strbeta = sprintf('\\alpha = %.1e,\\beta = %.1e,\\epsilon = %.1e',optsArr(i).R.alpha, optsArr(i).R.betta, optsArr(i).R.epsilon);
-    %strbeta = sprintf('\\alpha = %.1e',optsArr(i).R.alpha);
-    %strbeta = sprintf('\\beta = %.1e,\\epsilon = %.1e', optsArr(i).R.alphaTV, optsArr(i).R.epsilon);
-    imagesc(x,z,vk,[min(v.Base(:)) max(v.Base(:))]);%title(strbeta);
-    
-    
-    axis off equal tight
-
-fig.PaperUnits = 'inches';
-fig251.PaperPosition = [0 0 24 8];
-print(fig251, [figFolder,'/fwiFinal'], '-depsc');
-
+figure;
+imagescc(fwiResult.final,model,'Final',[figFolder 'final'])
 
 
 
