@@ -9,7 +9,7 @@ function [f,g] = misfit(m0,m,D,opts,model)
 % where P, Q encode the receiver and source locations and L is the first-order FD matrix
 %
 % use:
-%   [f,g,H] = misfit(m,D,model)
+%   [f,g] = misfit(m0, m, D, opts, model)
 %
 % input:
 %   m - squared-slownes [s^2/km^2]
@@ -29,7 +29,6 @@ function [f,g] = misfit(m0,m,D,opts,model)
 % output:
 %   f - value of misfit
 %   g - gradient (vector of size size(m))
-%   H - GN Hessian (function handle)
 
 alpha1 = opts.R.alpha;
 betta1 = opts.R.betta;
@@ -50,19 +49,12 @@ m = m0 + m;
 %%  get matrices
 L = getL(model.h,model.n);
 A = getA(model.f,m,model.h,model.n);
-P = getP(model.h,model.n,model.zr,model.xr);
-Q = getQ(model.h,model.n,model.zs,model.xs);
-G = @(u)getG(model.f,m,u,model.h,model.n);
+P = getP(model.zr,model.xr, model.z, model.x);
+Q = getQ(model.zs,model.xs, model.z, model.x);
 
 %% forward banded matrix based solver
-%U = A\Q;
-
 spparms('bandden',0.0);
-%spparms('spumoni',2);
-%spparms('umfpack',0);
-tic;
 U = A\Q;
-toc;
 spparms('default');
 
 
@@ -92,7 +84,7 @@ end
 
 TVvec2 = (LReg*dm).^2;
 
-fprintf('Average epsilon to gradient %.3e; ',epsilon1/max(TVvec2));
+%fprintf('Average epsilon to gradient %.3e; ',epsilon1/max(TVvec2));
 
 MGSfunctional = norm((TVvec2./(TVvec2 + epsilon1)).^0.5)^2;
 
@@ -102,78 +94,87 @@ TVfunctional = norm((TVvec2 + epsilon1).^(p/4))^2;
 
 %% compute f with regularization terms
 % full data
-DOBS = P'*U;
+D_m = P'*U;
 
 % crop from data
-DOBS = DOBS.*sign(abs(D));
+D_m = D_m.*sign(abs(D));
 
 
-f = .5*norm(DOBS - D,'fro')^2 + .5*alpha1*norm(L*dm)^2 + .5*betta1*MGSfunctional + ...
+
+f_reg = .5*alpha1*norm(L*dm)^2 + .5*betta1*MGSfunctional + ...
     + .5*alphaTV*TVfunctional;
 
-regPart = 1-.5*norm(DOBS - D,'fro')^2/f;
-fprintf('Regularization ratio = %.3e \n',regPart);
+
+f_FWI = .5*norm(D_m - D,'fro')^2;
+
+f = f_reg + f_FWI;
 
 %% adjoint solve
 
 %tic;
 spparms('bandden',0.0);
-V = A'\(P*(D - DOBS));
+V = A'\(P*(D - D_m));
 spparms('default');
 %toc;
 
-%% compute g
-g = alpha1*(L'*L)*dm ...
-    + epsilon1*betta1*(LReg'*((LReg*dm)./(TVvec2 + epsilon1).^2)) ...
-    + p*alphaTV*LReg'*((LReg*dm).*((TVvec2 + epsilon1).^(p/2-1)));
+%% compute gReg -- gradient of the regularizer
+% Tikhonov regularizer
+gReg.Tikh = alpha1*(L'*L)*dm;
 
-gAbs = zeros(size(g));
+% Minimum gradient support regularizer
+gReg.MGS = epsilon1*betta1*(LReg'*((LReg*dm)./(TVvec2 + epsilon1).^2));
+
+% Sobolev space regularizer
+gReg.SS = p*alphaTV*LReg'*((LReg*dm).*((TVvec2 + epsilon1).^(p/2-1)));
+
+gReg.Full = gReg.Tikh + gReg.MGS + gReg.SS;
+
+
+
+%% stacking gradients from different sources
 omega = 1e-3*2*pi*f;
+gFWI = omega^2 * real(sum(conj(U).*V,2));
 
-for k = 1:size(U,2)
-    %g = g + real(G(U(:,k))'*V(:,k));
-    g = g + omega^2 * real(conj(U(:,k)).*V(:,k));
-    gAbs = gAbs + real(abs(U(:,k)).*abs(U(:,k)));
+g = gFWI + gReg.Full;
+
+regPart=norm(gReg.Full)/norm(gFWI);
+fprintf('Grad norm regularization ratio (norm(gReg.Full)/norm(gFWI)) = %.3e \n',regPart);
+
+%% basic tracking gradients and models for Pavel
+if opts.tracking
+
+load([opts.histFolder,'J'],'J')
+
+J.m = m;
+J.gFWI = reshape(gFWI, model.n);
+J.evalnum = J.evalnum + 1;
+
+save([opts.histFolder,'J'],'J')
+save([opts.histFolder,'/J_',num2str(J.evalnum)],'J')
+
 end
-
-%% project g
-
-gMax2 = max(gAbs);
-
-thresh = 0;%gMax2/5;
-
-g(gAbs(:)<thresh) = NaN;
-
+%% fix the boundaries
 g2d = reshape(g, model.n);
 
-%% fix the borders
 % horizontally
-edgeExp = 7; % 10
+edgeExp = 3; % 10
 g2d(:,1:edgeExp) = NaN;
 g2d(:,end-edgeExp+1:end)=NaN;
-
 
 % vertically
 edgeExp = 3;
 g2d(1:edgeExp, :) = NaN;
 g2d(end-edgeExp+1:end, :)=NaN;
 
-
+% fill in
 g2d = fillmissing(g2d,'nearest',2);
 g2d = fillmissing(g2d,'nearest');
 
-%imagesc(g2d);
-%drawnow
+g2d = opts.R.dvMask.*g2d;
+
+%figure(111); imagesc(g2d);
 
 g = g2d(:);
 
 
-% 
-% figure(111);
-% imagesc(gAbs2d);
-% drawnow;
-% 
-% figure(112);
-% imagesc(g2d);
-% drawnow;
 end
