@@ -22,7 +22,7 @@ mkdir_inform(figFolder);
 % read Marmousi II model (Baseline)
 dx = 50;
 v.True = dlmread('models/BP/bp_tooth_long.dat')/1e3;
-v.True = imresize(v.True, 40/dx, 'bilinear');git 
+v.True = imresize(v.True, 40/dx, 'bilinear');
 
 % append  N_ext_up points from above for the absorbing layer
 N_ext_up = 10;
@@ -58,7 +58,7 @@ m.Init = 1./v.Init(:).^2;
 % set frequency range, not larger than min(1e3*v(:))/(7.5*dx) or smaller than 0.5
 fMin  = 0.5; % this is the minimum frequency used for inversion
 fFactor = 1.2; % factor to the next frequncy
-fMax = 2; % this is the max frequency used for inversion
+fMax = 3; % this is the max frequency used for inversion
 
 % receivers
 model.xr = N_ext_up*dx:dx:max(x(:))-N_ext_up*dx;
@@ -113,16 +113,16 @@ opts.histAll = 0;
 
 %
 opts.tracking = true;
- opts.histFolder = 'JHist/';
-    disp('Full misfit evaluations history will be saved, which affects performance')
+opts.histFolder = 'JHist/';
+disp('Full misfit evaluations history will be saved, which affects performance')
 
 
 %% MAIN LOOP OVER FREQUENCIES
 it = 0;
 iFWI = 0;
-for iOut=1:3
-freq = fMin;
-for iOut=1:3
+for iOut=1:10
+    
+    freq = fMin;
     while freq<=fMax
         it=it+1;
         % acquire noisy data
@@ -139,8 +139,9 @@ for iOut=1:3
         noiseStandDev = noiseStandDev * sqrt(mean(mean(abs(DClean).*abs(DClean))));
         D = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev);
         
-        snrDB = snr(DClean, D-DClean)
-        matSNR  = db2pow(snrDB)
+        % check noise amplitude
+        snrDB = snr(DClean, D-DClean);
+        matSNR  = db2pow(snrDB);
         
         % Mute offsets beyond the max limit
         while model.maxOffset <= maxMaxOffset
@@ -154,6 +155,7 @@ for iOut=1:3
             
             %  FWI ================================================
             fwiResult = fwiFunc(iFWI, m.Init, D, model, opts);
+            iFWI = iFWI + 1;
             % =====================================================
             
             figure;
@@ -166,9 +168,8 @@ for iOut=1:3
             
         end
         m.Init = fwiResult.final(:).^-2;
-        freq = freq*fFactor
+        freq = freq*fFactor;
     end
-end
 end
 %%
 %%%%%%%%%%%%%%%%%

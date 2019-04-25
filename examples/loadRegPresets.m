@@ -17,7 +17,7 @@ regOpts.gFlag = 0;
 %opts.R.gFlag = 0;
 
 switch regFlag
-    case -2 %Sobolev (Tikhonov with derivative regularizaton)
+    case -2 % Tikhonov with derivative regularizaton
         regOpts.alpha = 100;
         regOpts.gFlag = 1;
         regOpts.alphaTV = 0;

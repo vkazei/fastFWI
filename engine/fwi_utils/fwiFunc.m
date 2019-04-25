@@ -14,14 +14,13 @@ if opts.tracking
         
     if iFWI == 0
         J.evalnum = 0;
+        J.m = m0;
+        J.gFWI = zeros(model.n);
+        J.fFWI = 0;
+        save([opts.histFolder,'J'],'J')
     else
         load([opts.histFolder,'J'],'J')
-    end
-    J.m = m0;
-    J.gFWI = zeros(model.n);
-    
-    save([opts.histFolder,'J'],'J')
-    
+    end     
 end
 
 % misfit

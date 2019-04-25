@@ -105,9 +105,9 @@ f_reg = .5*alpha1*norm(L*dm)^2 + .5*betta1*MGSfunctional + ...
     + .5*alphaTV*TVfunctional;
 
 
-f_FWI = .5*norm(D_m - D,'fro')^2;
+fFWI = .5*norm(D_m - D,'fro')^2;
 
-f = f_reg + f_FWI;
+f = f_reg + fFWI;
 
 %% adjoint solve
 
@@ -148,6 +148,7 @@ load([opts.histFolder,'J'],'J')
 J.m = m;
 J.gFWI = reshape(gFWI, model.n);
 J.evalnum = J.evalnum + 1;
+J.fFWI = fFWI;
 
 save([opts.histFolder,'J'],'J')
 save([opts.histFolder,'/J_',num2str(J.evalnum)],'J')
