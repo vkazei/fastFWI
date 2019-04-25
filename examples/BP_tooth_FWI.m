@@ -18,9 +18,15 @@ set(groot,'DefaultFigureColormap',rdbuMap())
 figFolder = 'Fig/';
 mkdir_inform(figFolder);
 
+% tracking
+opts.tracking = true;
+opts.histFolder = 'JHist/';
+disp('Full misfit evaluations history will be saved, which affects performance')
+
+
 %% MODEL and GRID
 % read Marmousi II model (Baseline)
-dx = 50;
+dx = 100;
 v.True = dlmread('models/BP/bp_tooth_long.dat')/1e3;
 v.True = imresize(v.True, 40/dx, 'bilinear');
 
@@ -58,7 +64,7 @@ m.Init = 1./v.Init(:).^2;
 % set frequency range, not larger than min(1e3*v(:))/(7.5*dx) or smaller than 0.5
 fMin  = 0.5; % this is the minimum frequency used for inversion
 fFactor = 1.2; % factor to the next frequncy
-fMax = 3; % this is the max frequency used for inversion
+fMax = 1; % this is the max frequency used for inversion
 
 % receivers
 model.xr = N_ext_up*dx:dx:max(x(:))-N_ext_up*dx;
@@ -99,7 +105,7 @@ opts.R.dvMask = zz>100;
 % lbfgs "depth" - number of gradients
 opts.m = 10;
 % max number of iterations - number of search directions
-opts.maxIts = 50;
+opts.maxIts = 30;
 %same including the number of line search steps
 opts.maxTotalIts = 1000;
 %output of functional through iterations
@@ -111,16 +117,12 @@ opts.factr = 1e11;
 
 opts.histAll = 0;
 
-%
-opts.tracking = true;
-opts.histFolder = 'JHist/';
-disp('Full misfit evaluations history will be saved, which affects performance')
 
 
 %% MAIN LOOP OVER FREQUENCIES
 it = 0;
 iFWI = 0;
-for iOut=1:10
+for iOut=1:2
     
     freq = fMin;
     while freq<=fMax
@@ -179,7 +181,8 @@ figure;
 imagescc(fwiResult.final,model,'Final',[figFolder 'final'])
 
 if opts.tracking
-    disp('Run create_J_movie.m later to gather all iterations in a movie')
+    fprintf('create_convergence_movie.m is gathering all iterations into a movie... \n')
+    create_convergence_movie(opts)
 end
 
 toc;
