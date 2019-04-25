@@ -15,8 +15,8 @@ addpath(genpath('../engine/'));
 set(groot,'DefaultFigureColormap',rdbuMap())
 
 % Create folder to store output figures
-figFolder = 'Fig/';
-mkdir_inform(figFolder);
+opts.figFolder = 'Fig/';
+mkdir_inform(opts.figFolder);
 
 % tracking
 opts.tracking = true;
@@ -48,9 +48,9 @@ model.z = z;
 v_Fun_Init = @(zz,xx)v.True(1)+0.82e-3*max(zz-450,0);
 v.Init = v_Fun_Init(zz,xx);
 
-imagescc(v.True,model,'BP 2004',[figFolder,'true'])
+imagescc(v.True,model,'BP 2004',[opts.figFolder,'true'])
 model.caxis = caxis;
-imagescc(v.Init,model,'Initial',[figFolder,'init'])
+imagescc(v.Init,model,'Initial',[opts.figFolder,'init'])
 
 % model - converted to squared slowness
 %baseline
@@ -161,7 +161,7 @@ for iOut=1:2
             % =====================================================
             
             figure;
-            imagescc(fwiResult.final,model,[num2str(model.f) ' Hz'],[figFolder num2str(it)])
+            imagescc(fwiResult.final,model,[num2str(model.f) ' Hz'],[opts.figFolder num2str(it)])
             
             % Relax regularization and increase affordable offset
             model.maxOffset = fFactor*model.maxOffset;
@@ -178,11 +178,9 @@ end
 % FINAL PLOT
 %%%%%%%%%%%%%%%%%
 figure;
-imagescc(fwiResult.final,model,'Final',[figFolder 'final'])
+imagescc(fwiResult.final,model,'Final',[opts.figFolder 'final'])
 
-if opts.tracking
-    fprintf('create_convergence_movie.m is gathering all iterations into a movie... \n')
-    create_convergence_movie(opts)
-end
+% if you tracked history (opts.tracking == 1) a movie will be created
+create_convergence_movie(opts)
 
 toc;

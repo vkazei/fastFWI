@@ -4,28 +4,23 @@
 %
 % Vladimir Kazei and Oleg Ovcharenko, 2019
 
+%% initialization
 tic
-close all
-clearvars
-restoredefaultpath
+% cleaning
+close all; clearvars; restoredefaultpath;
 spparms('bandden',0.0)
 
 % Link core folders
 addpath(genpath('../engine/'));
 set(groot,'DefaultFigureColormap',rdbuMap())
 
-% Create Fig/ folder where to store output images
-figFolder = 'Fig/';
-if exist(figFolder, 'dir')
-    fprintf(['Exist ' figFolder '\n']);
-else
-    mkdir(figFolder);
-    fprintf(['Create ' figFolder '\n']);
-end
+% Create folder to store output figures
+opts.figFolder = 'Fig/';
+mkdir_inform(opts.figFolder);
 
 %% MODEL and GRID
 % read Marmousi II model (Baseline)
-dx = 50;
+dx = 100 ;
 v.Base = dlmread('models/marm2/marm2_10.dat');
 v.Base = imresize(v.Base, 10/dx, 'bilinear');
 
@@ -47,9 +42,9 @@ model.z = z;
 v_Fun_Init = @(zz,xx)v.Base(1)+0.9e-3*max(zz-450,0);
 v.Init = v_Fun_Init(zz,xx);
 
-imagescc(v.Base,model,'Marmousi II',[figFolder,'true'])
+imagescc(v.Base,model,'Marmousi II',[opts.figFolder,'true'])
 model.caxis = caxis;
-imagescc(v.Init,model,'Initial',[figFolder,'init'])
+imagescc(v.Init,model,'Initial',[opts.figFolder,'init'])
 
 % model - converted to squared slowness
 %baseline
@@ -63,7 +58,7 @@ m.Init = 1./v.Init(:).^2;
 % set frequency range, not larger than min(1e3*v(:))/(7.5*dx) or smaller than 0.5
 fMin  = 1; % this is the minimum frequency used for inversion
 fFactor = 1.2; % factor to the next frequncy
-fMax = 5; % this is the max frequency used for inversion
+fMax = 2; % this is the max frequency used for inversion
 
 % receivers
 model.xr = 5*dx:dx:16800;
@@ -103,7 +98,7 @@ opts.R.dvMask = zz>400;
 % lbfgs "depth" - number of gradients
 opts.m = 2;
 % max number of iterations - number of search directions
-opts.maxIts = 50;
+opts.maxIts = 10;
 %same including the number of line search steps
 opts.maxTotalIts = 1000;
 %output of functional through iterations
@@ -115,63 +110,80 @@ opts.factr = 1e11;
 
 opts.histAll = 0;
 
+%
+opts.tracking = true;
+if opts.tracking
+    % Create folder to store history of misfit (f, g) evaluations
+    opts.histFolder = 'JHist/';
+    disp('Full misfit evaluations history will be saved, which affects performance')
+    
+    mkdir_inform(opts.histFolder)
+    J.m = m;
+    J.gFWI = zeros(model.n);
+    J.evalnum = 0;
+    
+    save([opts.histFolder,'J'],'J')
+    
+end
+
 
 %% MAIN LOOP OVER FREQUENCIES
 it=0;
 freq = fMin;
-while freq<=fMax
-    it=it+1;
-    % acquire noisy data
-    model.maxOffset = minMaxOffset;
-    model.f = freq;
-    
-    DClean = F(m.Base,model);
-    D0 = F(m.Init,model);
-    
-    % Gaussian noise
-    mySNR = 100;
-    
-    noiseStandDev = 1/sqrt(mySNR);
-    noiseStandDev = noiseStandDev * sqrt(mean(mean(abs(DClean).*abs(DClean))));
-    D = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev);
-    
-    snrDB = snr(DClean, D-DClean)
-    matSNR  = db2pow(snrDB)
-    
-    % Mute offsets beyond the max limit
-    while model.maxOffset <= maxMaxOffset
-        for i=1:size(model.xr,2)
-            for j=1:size(model.xs,2)
-                if abs(model.xr(i)-model.xs(j))>model.maxOffset
-                    D(i,j)=0;
+for iOut=1:3
+    while freq<=fMax
+        it=it+1;
+        % acquire noisy data
+        model.maxOffset = minMaxOffset;
+        model.f = freq;
+        
+        DClean = F(m.Base,model);
+        D0 = F(m.Init,model);
+        
+        % Gaussian noise
+        mySNR = 100;
+        
+        noiseStandDev = 1/sqrt(mySNR);
+        noiseStandDev = noiseStandDev * sqrt(mean(mean(abs(DClean).*abs(DClean))));
+        D = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev);
+        
+        snrDB = snr(DClean, D-DClean)
+        matSNR  = db2pow(snrDB)
+        
+        % Mute offsets beyond the max limit
+        while model.maxOffset <= maxMaxOffset
+            for i=1:size(model.xr,2)
+                for j=1:size(model.xs,2)
+                    if abs(model.xr(i)-model.xs(j))>model.maxOffset
+                        D(i,j)=0;
+                    end
                 end
             end
+            
+            %  FWI ================================================
+            fwiResult = fwiFunc(i, m.Init, D, model, opts);
+            % =====================================================
+            
+            figure;
+            imagescc(fwiResult.final,model,[num2str(model.f) ' Hz'],[opts.figFolder num2str(it)])
+            
+            % Relax regularization and increase affordable offset
+            model.maxOffset = fFactor*model.maxOffset;
+            opts.R.alphaTV = opts.R.alphaTV/fFactor;
+            m.Init(:) = 1./fwiResult.final(:).^2;
+            
         end
-        
-        %  FWI ================================================
-        fwiResult = fwiFunc(i, m.Init, D, model, opts);
-        % =====================================================
-        
-        figure;
-        imagescc(fwiResult.final,model,[num2str(model.f) ' Hz'],[figFolder num2str(it)])
-        
-        % Relax regularization and increase affordable offset
-        model.maxOffset = fFactor*model.maxOffset;
-        opts.R.alphaTV = opts.R.alphaTV/fFactor;    
-        m.Init(:) = 1./fwiResult.final(:).^2;
-        
+        m.Init = fwiResult.final(:).^-2;
+        freq = freq*fFactor
     end
-    m.Init = fwiResult.final(:).^-2;
-    freq = freq*fFactor
 end
-
 %%
 %%%%%%%%%%%%%%%%%
 % FINAL PLOT
 %%%%%%%%%%%%%%%%%
 figure;
-imagescc(fwiResult.final,model,'Final',[figFolder 'final'])
+imagescc(fwiResult.final,model,'Final',[opts.figFolder 'final'])
 
-
+create_convergence_movie(opts)
 
 toc;
