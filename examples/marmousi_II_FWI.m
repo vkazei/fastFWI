@@ -145,13 +145,14 @@ for iOut=1:3
         
         noiseStandDev = 1/sqrt(mySNR);
         noiseStandDev = noiseStandDev * sqrt(mean(mean(abs(DClean).*abs(DClean))));
-        D = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev);
+        Dorig = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev);
         
         snrDB = snr(DClean, D-DClean)
         matSNR  = db2pow(snrDB)
         
         % Mute offsets beyond the max limit
         while model.maxOffset <= maxMaxOffset
+            D=Dorig;
             for i=1:size(model.xr,2)
                 for j=1:size(model.xs,2)
                     if abs(model.xr(i)-model.xs(j))>model.maxOffset
