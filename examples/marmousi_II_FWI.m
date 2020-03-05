@@ -147,7 +147,7 @@ for iOut=1:3
         noiseStandDev = noiseStandDev * sqrt(mean(mean(abs(DClean).*abs(DClean))));
         Dorig = DClean + sqrt(1/2)*(randn(size(DClean))*noiseStandDev+1i*randn(size(DClean))*noiseStandDev);
         
-        snrDB = snr(DClean, D-DClean)
+        snrDB = snr(DClean, Dorig-DClean)
         matSNR  = db2pow(snrDB)
         
         % Mute offsets beyond the max limit
