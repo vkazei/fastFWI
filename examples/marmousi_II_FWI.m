@@ -153,13 +153,8 @@ for iOut=1:3
         % Mute offsets beyond the max limit
         while model.maxOffset <= maxMaxOffset
             D=Dorig;
-            for i=1:size(model.xr,2)
-                for j=1:size(model.xs,2)
-                    if abs(model.xr(i)-model.xs(j))>model.maxOffset
-                        D(i,j)=0;
-                    end
-                end
-            end
+            [xrxr,xsxs] = ndgrid(model.xr,model.xs);
+            D(abs(xrxr-xsxs)>model.maxOffset)=0;
             
             %  FWI ================================================
             fwiResult = fwiFunc(i, m.Init, D, model, opts);
