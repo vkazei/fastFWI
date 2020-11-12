@@ -2,6 +2,9 @@
 
 (c) Vladimir Kazei and Oleg Ovcharenko (KAUST, 2019)
 
+Helmholtz solver is a submodule, so clone with:
+git clone --recursive https://github.com/vkazei/fastFWI.git
+
 ## Full-waveform inversion
 Standard L2 full-waveform inversion  
 ||D(m)-D_obs||^2 + F_reg(m_0, m) is minimized  
